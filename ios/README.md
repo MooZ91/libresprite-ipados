@@ -20,33 +20,28 @@ the build machine rather than the target. Build one for the host:
 
 ## 2. Build the dependencies for iOS
 
-None of the Homebrew libraries can be reused: they are macOS binaries. Build
-static iOS ones into a prefix of their own. All of them are plain CMake builds
-configured with `CMAKE_SYSTEM_NAME=iOS`, except:
+None of the Homebrew libraries can be reused: they are macOS binaries. The
+script builds static iOS ones -- including a patched SDL2, see below -- into a
+prefix of its own:
 
-- **libjpeg-turbo** needs `-DCMAKE_SYSTEM_PROCESSOR=arm64`; cross-compiling
-  leaves that variable empty and its CMakeLists fails on it.
-- **giflib** ships no CMake build; compile its library sources directly.
-- **pixman** ships no CMake build either, and needs `-DHAVE_PTHREADS`. Only
-  `pixman_region32_*` is used (see `src/gfx/region.cpp`), so building
-  `pixman-region32.c` alone is enough, plus stubs for `_pixman_log_error` and
-  the `pixman_image_get_*` accessors that `pixman_region32_init_from_image()`
-  refers to but that LibreSprite never calls.
-- **SDL2_image** must be built with `-DSDL2IMAGE_QOI=OFF`. It bundles its own
-  copy of QOI, which collides with LibreSprite's when everything is linked
-  statically under `-all_load`.
-- **SDL2** must be patched first, see below.
+    ./ios/build-deps.sh simulator     # build/ios-deps/prefix-simulator
+    ./ios/build-deps.sh device        # build/ios-deps/prefix-device
 
 zlib comes from the iOS SDK. libcurl, libarchive and V8 are unavailable on iOS
 and are not needed: the sources that use them disable themselves.
 
-## 3. Patch SDL2
+Most of these are ordinary CMake builds. The ones that are not, and the reason
+in each case, are commented in the script: libjpeg-turbo needs
+`CMAKE_SYSTEM_PROCESSOR` set by hand, giflib and pixman ship no CMake build,
+only pixman's region32 API is used, and SDL2_image has to be built without its
+bundled QOI so it does not collide with LibreSprite's.
 
-    cd <sdl2-source> && patch -p1 < ios/patches/sdl2-ios-pencil.patch
+## 3. The SDL2 patch
 
-Stock SDL cannot tell an Apple Pencil from a finger or a resting palm, and
-reports raw `UITouch.force` where its own API documents a 0..1 pressure. The
-patch gives the pencil a touch device of its own and normalises pressure.
+`ios/patches/sdl2-ios-pencil.patch` is applied by the script. Stock SDL cannot
+tell an Apple Pencil from a finger or a resting palm, and reports raw
+`UITouch.force` where its own API documents a 0..1 pressure. The patch gives
+the pencil a touch device of its own and normalises pressure.
 
 ## 4. Build the app
 
