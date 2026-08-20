@@ -16,6 +16,10 @@
 
 #include <cstdlib>
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #endif
@@ -68,6 +72,11 @@ static int win32_shell_execute(const wchar_t* verb, const wchar_t* file, const w
 namespace base {
 namespace launcher {
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+// Implemented in launcher_ios.mm.
+bool ios_open_url(const std::string& url);
+#endif
+
 bool open_url(const std::string& url)
 {
   return open_file(url);
@@ -91,6 +100,10 @@ bool open_file(const std::string& file)
 
   ret = win32_shell_execute(L"open",
                             base::from_utf8(file).c_str(), NULL);
+
+#elif defined(__APPLE__) && TARGET_OS_IPHONE
+
+  return ios_open_url(file);
 
 #elif __APPLE__
 
@@ -121,6 +134,12 @@ bool open_folder(const std::string& _file)
       (L"/e,/select,\"" + base::from_utf8(file) + L"\"").c_str());
   }
   return (ret == 0);
+
+#elif defined(__APPLE__) && TARGET_OS_IPHONE
+
+  // iOS sandboxes each app and ships no file manager to reveal a path in.
+  (void)file;
+  return false;
 
 #elif __APPLE__
 

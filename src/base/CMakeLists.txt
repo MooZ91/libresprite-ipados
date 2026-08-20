@@ -62,6 +62,11 @@ set(BASE_SOURCES
 if(APPLE)
   set(BASE_SOURCES ${BASE_SOURCES}
     fs_osx.mm)
+  if(IOS)
+    # std::system() does not exist on iOS; URLs go through UIApplication.
+    set(BASE_SOURCES ${BASE_SOURCES}
+      launcher_ios.mm)
+  endif()
 endif()
 
 if(WIN32)

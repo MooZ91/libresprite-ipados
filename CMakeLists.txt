@@ -43,6 +43,12 @@ option(ENABLE_TESTS       "Enable the unit tests" off)
 option(FULLSCREEN_PLATFORM "Enable fullscreen by default" off)
 
 option(USE_SDL2_BACKEND "Use SDL2 backend" on)
+
+# The "gen" code generator runs on the build machine, so when cross-compiling
+# it has to be built separately for the host and pointed at here. Configure a
+# host build with -DGEN_ONLY=on to produce one.
+set(GEN_EXECUTABLE "" CACHE FILEPATH
+    "Path to a host-built 'gen' tool (required when cross-compiling)")
 option(USE_V8_SANDBOX "Use V8 Sandbox" off)
 
 ######################################################################
@@ -150,18 +156,27 @@ find_package(ZLIB REQUIRED)
 include_directories(${ZLIB_INCLUDE_DIRS})
 
 # libArchive
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    # Homebrew ships libarchive keg only, include dirs have to be set manually
-    execute_process(
-        COMMAND brew --prefix libarchive
-        OUTPUT_VARIABLE LIBARCHIVE_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        COMMAND_ERROR_IS_FATAL ANY
-    )
-    set(LibArchive_INCLUDE_DIR "${LIBARCHIVE_PREFIX}/include")
+# Optional on iOS: the SDK ships libarchive as a private library with no
+# headers, so app/file/extension_format.cpp disables itself through
+# __has_include(<archive.h>) and the .zip extension format is simply absent.
+if(IOS)
+  find_package(LibArchive QUIET)
+else()
+  if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+      # Homebrew ships libarchive keg only, include dirs have to be set manually
+      execute_process(
+          COMMAND brew --prefix libarchive
+          OUTPUT_VARIABLE LIBARCHIVE_PREFIX
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+          COMMAND_ERROR_IS_FATAL ANY
+      )
+      set(LibArchive_INCLUDE_DIR "${LIBARCHIVE_PREFIX}/include")
+  endif()
+  find_package(LibArchive REQUIRED)
 endif()
-find_package(LibArchive REQUIRED)
-include_directories(${LibArchive_INCLUDE_DIR})
+if(LibArchive_FOUND)
+  include_directories(${LibArchive_INCLUDE_DIR})
+endif()
 
 # libpng
 find_package(PNG REQUIRED)
@@ -200,8 +215,13 @@ include_directories(${GIF_INCLUDE_DIRS})
 find_package(JPEG REQUIRED)
 include_directories(${JPEG_INCLUDE_DIRS})
 
-# v8
-find_package(V8 QUIET)
+# v8 -- unavailable on iOS, which forbids JIT compilation. The duktape
+# engine in src/script/duktape is used instead.
+if(IOS)
+  set(V8_FOUND FALSE)
+else()
+  find_package(V8 QUIET)
+endif()
 if(V8_FOUND)
   include_directories(${V8_INCLUDE_DIR})
   add_definitions(-DSCRIPT_ENGINE_V8=1)
@@ -245,8 +265,17 @@ else()
 endif()
 
 
-find_package(CURL REQUIRED)
-include_directories(${CURL_INCLUDE_DIRS})
+# Optional on iOS: libcurl is not part of the SDK, so net/http_request.cpp
+# disables itself through __has_include(<curl/curl.h>) and the stub
+# implementation in net/http_request_null.cpp takes over.
+if(IOS)
+  find_package(CURL QUIET)
+else()
+  find_package(CURL REQUIRED)
+endif()
+if(CURL_FOUND)
+  include_directories(${CURL_INCLUDE_DIRS})
+endif()
 endif()
 # simpleini
 include_directories(${SIMPLEINI_DIR})
@@ -260,10 +289,22 @@ set(PLATFORM_LIBS)
 if(USE_SDL2_BACKEND)
   add_definitions(-DUSE_SDL2_BACKEND)
 
-  find_package(SDL2 REQUIRED)
-  include_directories(${SDL2_INCLUDE_DIRS})
-  find_package(SDL2_IMAGE REQUIRED)
-  include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+  if(IOS)
+    # cmake/FindSDL2.cmake hardcodes "-framework Cocoa" for APPLE, which does
+    # not exist on iOS. The static iOS build installs its own CMake config,
+    # and its imported target already carries the right frameworks.
+    find_package(SDL2 CONFIG REQUIRED)
+    find_package(SDL2_image CONFIG REQUIRED)
+    # On iOS SDL_main.h redefines main() to SDL_main(); the actual entry
+    # point, which starts UIApplication, lives in SDL2main.
+    set(SDL2_LIBRARIES SDL2::SDL2main SDL2::SDL2-static)
+    set(SDL2_IMAGE_LIBRARIES SDL2_image::SDL2_image-static)
+  else()
+    find_package(SDL2 REQUIRED)
+    include_directories(${SDL2_INCLUDE_DIRS})
+    find_package(SDL2_IMAGE REQUIRED)
+    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+  endif()
 endif()
 
 # -- Unix --
@@ -330,9 +371,21 @@ if(WIN32)
   add_definitions(-DUNICODE -D_UNICODE)
 endif(WIN32)
 
+# -- iOS --
+
+if(IOS)
+  find_library(UIKIT_LIBRARY UIKit)
+  find_library(FOUNDATION_LIBRARY Foundation)
+  mark_as_advanced(UIKIT_LIBRARY FOUNDATION_LIBRARY)
+
+  list(APPEND PLATFORM_LIBS
+    ${UIKIT_LIBRARY}
+    ${FOUNDATION_LIBRARY})
+endif()
+
 # -- Mac OS X --
 
-if(APPLE)
+if(APPLE AND NOT IOS)
   find_library(COCOA_LIBRARY Cocoa)
   find_library(CARBON_LIBRARY Carbon)
   find_library(IOKIT_LIBRARY IOKit)
@@ -355,7 +408,7 @@ if(APPLE)
     if(COMPILER_GCC)
         set(WFLAGS "${WFLAGS} -Wno-deprecated-declarations")
     endif(COMPILER_GCC)
-endif(APPLE)
+endif()
 
 if(WITH_DESKTOP_INTEGRATION)
   add_subdirectory(desktop)

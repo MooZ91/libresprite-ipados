@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>@LIBRESPRITE_BUNDLE_EXECUTABLE@</string>
+	<key>CFBundleIdentifier</key>
+	<string>@LIBRESPRITE_BUNDLE_IDENTIFIER@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>LibreSprite</string>
+	<key>CFBundleDisplayName</key>
+	<string>LibreSprite</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@LIBRESPRITE_VERSION_NUMERIC@</string>
+	<key>CFBundleVersion</key>
+	<string>@LIBRESPRITE_VERSION_NUMERIC@</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>MinimumOSVersion</key>
+	<string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
+
+	<!-- 2 = iPad only. -->
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>2</integer>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+
+	<!-- An empty UILaunchScreen still has to be present: without one iOS runs
+	     the app in a scaled compatibility mode instead of at native
+	     resolution, which would blur every pixel LibreSprite draws. -->
+	<key>UILaunchScreen</key>
+	<dict/>
+
+	<!-- Landscape only: LibreSprite's menu bar and docked panels need more
+	     horizontal room than an iPad gives in portrait, where the menu bar
+	     gets clipped. Both landscape directions so the camera/keyboard side
+	     is the user's choice. -->
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!-- The editor wants the whole screen; opting out of Split View also
+	     avoids having to handle multitasking resizes for now. -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UIStatusBarHidden</key>
+	<true/>
+
+	<!-- LibreSprite's UI is built around a pointer, so let the iPad deliver
+	     real trackpad and mouse events rather than synthesised touches. -->
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- There is no native file dialog on iOS (she/osx/native_dialogs.mm is
+	     Cocoa-only), so the Files app is how sprites get in and out. -->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+</dict>
+</plist>

@@ -73,7 +73,13 @@ add_subdirectory(base)
 # Directory where base/config.h file is located
 include_directories(${BASE_INCLUDE_DIR})
 
-add_subdirectory(gen)
+if(GEN_EXECUTABLE)
+  # Cross-compiling: reuse the host-built tool, adding no build target for it.
+  add_custom_target(gen)
+else()
+  add_subdirectory(gen)
+  set(GEN_EXECUTABLE ${CMAKE_BINARY_DIR}/bin/gen)
+endif()
 add_subdirectory(app)
 if (NOT GEN_ONLY)
 add_subdirectory(cfg)
@@ -148,11 +154,47 @@ target_link_libraries(libresprite ${KEEP_INJECTIONS_BEGIN}
   ${FREETYPE_LIBRARIES}
   ${PLATFORM_LIBS})
 
-install(TARGETS libresprite
-  RUNTIME DESTINATION bin)
+if(IOS)
+  # Keep the bundle version in step with the one the app reports about itself.
+  # CFBundleVersion only accepts digits and dots, so "1.2-dev" becomes "1.2".
+  file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/config.h" _libresprite_version_line
+       REGEX "^#define[ \t]+VERSION[ \t]+\"")
+  string(REGEX REPLACE "^#define[ \t]+VERSION[ \t]+\"([^\"]*)\".*$" "\\1"
+         LIBRESPRITE_VERSION "${_libresprite_version_line}")
+  string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" LIBRESPRITE_VERSION_NUMERIC
+         "${LIBRESPRITE_VERSION}")
+  if(NOT LIBRESPRITE_VERSION_NUMERIC)
+    set(LIBRESPRITE_VERSION_NUMERIC "0.0")
+  endif()
 
-install(DIRECTORY ../data
-  DESTINATION share/libresprite)
+  set(LIBRESPRITE_BUNDLE_EXECUTABLE "libresprite")
+  set(LIBRESPRITE_BUNDLE_IDENTIFIER "org.libresprite.LibreSprite")
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/main/Info.plist.in
+    ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
+    @ONLY)
+
+  # On iOS the executable is an .app bundle and data/ has to live inside it:
+  # there is no shared prefix to install into on a sandboxed device.
+  set_target_properties(libresprite PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${LIBRESPRITE_BUNDLE_IDENTIFIER}")
+
+  set_source_files_properties(${CMAKE_SOURCE_DIR}/data
+    PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  target_sources(libresprite PRIVATE ${CMAKE_SOURCE_DIR}/data)
+
+  install(TARGETS libresprite
+    BUNDLE DESTINATION .
+    RUNTIME DESTINATION bin)
+else()
+  install(TARGETS libresprite
+    RUNTIME DESTINATION bin)
+
+  install(DIRECTORY ../data
+    DESTINATION share/libresprite)
+endif()
 else()
   add_custom_target(libresprite DEPENDS app-lib)
 endif()

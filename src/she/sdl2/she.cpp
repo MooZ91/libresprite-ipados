@@ -10,6 +10,10 @@
 
 #include "she/she.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #include "base/concurrent_queue.h"
 #include "base/exception.h"
 #include "base/string.h"
@@ -418,8 +422,19 @@ namespace she {
 	    continue;
 	    #else
             auto display = sdl::windowIdToDisplay[sdlEvent.window.windowID];
-            display->setWidth(sdlEvent.window.data1);
-            display->setHeight(sdlEvent.window.data2);
+            int newWidth = sdlEvent.window.data1;
+            int newHeight = sdlEvent.window.data2;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+            // data1/data2 come in points, but on iOS the display is measured
+            // in pixels with the screen density folded into its scale (see
+            // SDL2Display's constructor). Mixing the two units here would
+            // resize the surface to a fraction of the screen on every
+            // rotation, so ask SDL for the pixel size instead.
+            SDL_GetWindowSizeInPixels(SDL_GetWindowFromID(sdlEvent.window.windowID),
+                                      &newWidth, &newHeight);
+#endif
+            display->setWidth(newWidth);
+            display->setHeight(newHeight);
             display->recreateSurface();
             event.setType(Event::ResizeDisplay);
             event.setDisplay(display);

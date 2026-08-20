@@ -37,10 +37,14 @@ if(WIN32)
 endif()
 
 if(APPLE)
-  list(APPEND SHE_SOURCES
-    osx/logger.mm
-    osx/native_dialogs.mm
-    osx/tablet.mm)
+  # logger.mm only needs Foundation, so it builds everywhere. native_dialogs.mm
+  # pulls in Cocoa and tablet.mm ApplicationServices; neither exists on iOS.
+  list(APPEND SHE_SOURCES osx/logger.mm)
+  if(NOT IOS)
+    list(APPEND SHE_SOURCES
+      osx/native_dialogs.mm
+      osx/tablet.mm)
+  endif()
 endif()
 
 if(WITH_GTK_FILE_DIALOG_SUPPORT AND UNIX AND NOT APPLE AND NOT BEOS)

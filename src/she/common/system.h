@@ -20,6 +20,10 @@
 #include "she/common/sprite_sheet_font.h"
 #include "she/system.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 namespace she {
 
 #ifdef __APPLE__
@@ -48,7 +52,7 @@ public:
 #ifdef _WIN32
     if (!m_nativeDialogs)
       m_nativeDialogs = new NativeDialogsWin32();
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) && !TARGET_OS_IPHONE
     if (!m_nativeDialogs)
       m_nativeDialogs = new NativeDialogsOSX();
 #elif defined(ASEPRITE_WITH_GTK_FILE_DIALOG_SUPPORT) && defined(__linux__)

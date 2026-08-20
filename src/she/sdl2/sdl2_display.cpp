@@ -38,6 +38,10 @@
 #include <vector>
 
 #if __APPLE__
+#include <TargetConditionals.h>
+#endif
+
+#if __APPLE__ && !TARGET_OS_IPHONE
 namespace osx_tablet {
   int init();
 }
@@ -70,12 +74,26 @@ namespace she {
     width = 800;
     height = 600;
 
+    Uint32 windowFlags = SDL_WINDOW_RESIZABLE;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    // ALLOW_HIGHDPI makes SDL give us the screen's real pixel grid. Without
+    // it SDL works in points and iOS smoothly upscales the result, which is
+    // the one thing a pixel art editor must never do.
+    //
+    // BORDERLESS is what SDL_uikitviewcontroller's prefersStatusBarHidden
+    // checks, so it is also how the iOS status bar stops covering the menu bar.
+    windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_BORDERLESS;
+
+    // Every scaling step below has to stay nearest-neighbour.
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+#endif
+
     instance()->gfx([&]{
       m_window = SDL_CreateWindow("",
 				  SDL_WINDOWPOS_UNDEFINED,
 				  SDL_WINDOWPOS_UNDEFINED,
 				  width, height,
-				  SDL_WINDOW_RESIZABLE);
+				  windowFlags);
       if (!m_window)
 	throw DisplayCreationException(SDL_GetError());
 
@@ -84,8 +102,39 @@ namespace she {
 
       sdl::windowIdToDisplay[SDL_GetWindowID(m_window)] = this;
       SDL_GetWindowSize(m_window, &width, &height);
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+      // Measure the display in pixels rather than points and fold the screen's
+      // density into the scale factor. The drawing surface keeps the size it
+      // had before -- so the UI stays the same physical size -- but it is now
+      // blown up by an exact integer factor onto the native grid instead of
+      // being resampled by iOS.
+      int pixelWidth = width, pixelHeight = height;
+      SDL_GetWindowSizeInPixels(m_window, &pixelWidth, &pixelHeight);
+      if (width > 0 && height > 0) {
+	int density = pixelWidth / width;
+	if (density >= 1) {
+	  scale *= density;
+	  width = pixelWidth;
+	  height = pixelHeight;
+	}
+      }
+#endif
+
       m_width = width;
       m_height = height;
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+      {
+	int pw = 0, ph = 0, ow = 0, ow2 = 0;
+	SDL_GetWindowSize(m_window, &pw, &ph);
+	if (m_renderer)
+	  SDL_GetRendererOutputSize(m_renderer, &ow, &ow2);
+	std::cout << "iOS display: " << pw << "x" << ph << " points, "
+		  << m_width << "x" << m_height << " pixels, renderer output "
+		  << ow << "x" << ow2 << ", scale " << scale << std::endl;
+      }
+#endif
 
       SDL_ShowCursor(SDL_DISABLE);
 
@@ -113,7 +162,7 @@ namespace she {
 	  std::cout << "Unsupported wm subsystem for tablets" << std::endl;
       }
 #endif
-#elif __APPLE__
+#elif __APPLE__ && !TARGET_OS_IPHONE
       tabletSupport = osx_tablet::init();
 #endif
       std::cout << "Tablet support: " << (tabletSupport ? "OK" : "FAILED") << std::endl;
