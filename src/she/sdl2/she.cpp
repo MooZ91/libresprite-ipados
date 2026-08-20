@@ -55,6 +55,33 @@ namespace ui {
   }
 }
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+namespace {
+  SDL_TouchID pencilTouchId = 0;
+
+  // Our SDL build reports Apple Pencil on a touch device of its own, named
+  // "pencil" (see ios/patches/sdl2-ios-pencil.patch); stock SDL cannot tell a
+  // pencil from a finger or a resting palm. The device only comes into
+  // existence once the first pencil touch arrives, so keep looking until then.
+  bool isPencilTouch(SDL_TouchID id) {
+    if (!id)
+      return false;
+
+    if (!pencilTouchId) {
+      for (int i = 0, n = SDL_GetNumTouchDevices(); i < n; ++i) {
+        const char* name = SDL_GetTouchName(i);
+        if (name && SDL_strcmp(name, "pencil") == 0) {
+          pencilTouchId = SDL_GetTouchDevice(i);
+          break;
+        }
+      }
+    }
+
+    return pencilTouchId && id == pencilTouchId;
+  }
+}
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 extern "C" {
@@ -486,8 +513,26 @@ namespace she {
 	  event.setPointerType(pointerType);
           return;
 
+        case SDL_FINGERDOWN:
         case SDL_FINGERMOTION:
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+          // Only a pencil carries a meaningful pressure. A finger reports a
+          // fully pressed touch, which taken as pen pressure would pin the
+          // pointer type to Pen and hide the brush preview for good.
+          penPressure = isPencilTouch(sdlEvent.tfinger.touchId)
+            ? std::max<>(sdlEvent.tfinger.pressure, 0.0001f)
+            : 0.0f;
+#else
           penPressure = std::max<>(sdlEvent.tfinger.pressure, 0.0001f);
+#endif
+          continue;
+
+        case SDL_FINGERUP:
+          // Nothing used to clear this outside the emscripten path, so once a
+          // pen had touched the screen every later stroke stayed in pen mode
+          // at whatever pressure was last seen, and the brush preview -- which
+          // hides itself while a pen is down -- never came back.
+          penPressure = 0.0f;
           continue;
 
         case SDL_MOUSEWHEEL:

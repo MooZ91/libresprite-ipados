@@ -1,0 +1,105 @@
+--- a/src/video/uikit/SDL_uikitview.m
++++ b/src/video/uikit/SDL_uikitview.m
+@@ -47,6 +47,7 @@
+ 
+     SDL_TouchID directTouchId;
+     SDL_TouchID indirectTouchId;
++    SDL_TouchID pencilTouchId;
+ }
+ 
+ - (instancetype)initWithFrame:(CGRect)frame
+@@ -81,6 +82,7 @@
+ 
+         directTouchId = 1;
+         indirectTouchId = 2;
++        pencilTouchId = 3;
+ 
+ #if !TARGET_OS_TV
+         self.multipleTouchEnabled = YES;
+@@ -187,6 +189,29 @@
+ #endif
+ 
+     return SDL_TOUCH_DEVICE_DIRECT;
++}
++
++/* Apple Pencil reaches UIKit as an ordinary direct touch, indistinguishable
++   from a finger -- or from a palm resting on the screen -- by the time it
++   gets to SDL. Report it on a touch device of its own, named "pencil", so an
++   application can tell the two apart: to scale pressure correctly, and to
++   ignore palm contacts while the pencil is being used. */
++- (SDL_TouchID)touchIdForTouch:(UITouch *)touch
++{
++#ifdef __IPHONE_9_0
++    if ([touch respondsToSelector:@selector((type))]) {
++        if (touch.type == UITouchTypePencil) {
++            return pencilTouchId;
++        }
++    }
++#endif
++
++    return [self touchIdForType:[self touchTypeForTouch:touch]];
++}
++
++- (const char *)touchNameForId:(SDL_TouchID)touchId
++{
++    return (touchId == pencilTouchId) ? "pencil" : "";
+ }
+ 
+ - (SDL_TouchID)touchIdForType:(SDL_TouchDeviceType)type
+@@ -217,7 +242,16 @@
+ {
+ #ifdef __IPHONE_9_0
+     if ([touch respondsToSelector:@selector(force)]) {
+-        return (float) touch.force;
++        /* touch.force is expressed in units where maximumPossibleForce is the
++           top of the scale -- roughly 4.2 for Apple Pencil -- but
++           SDL_TouchFingerEvent documents pressure as 0..1, so normalise it.
++           Hardware without force sensing reports a maximum of 0 for a plain
++           finger; treat that as a fully pressed touch, because reporting no
++           pressure would make every finger stroke read as infinitely light. */
++        if (touch.maximumPossibleForce > 0.0) {
++            return (float) (touch.force / touch.maximumPossibleForce);
++        }
++        return 1.0f;
+     }
+ #endif
+ 
+@@ -264,10 +298,10 @@
+         if (!handled) {
+             CGPoint locationInView;
+             SDL_TouchDeviceType touchType = [self touchTypeForTouch:touch];
+-            SDL_TouchID touchId = [self touchIdForType:touchType];
++            SDL_TouchID touchId = [self touchIdForTouch:touch];
+             float pressure = [self pressureForTouch:touch];
+ 
+-            if (SDL_AddTouch(touchId, touchType, "") < 0) {
++            if (SDL_AddTouch(touchId, touchType, [self touchNameForId:touchId]) < 0) {
+                 continue;
+             }
+ 
+@@ -320,10 +354,10 @@
+         if (!handled) {
+             CGPoint locationInView;
+             SDL_TouchDeviceType touchType = [self touchTypeForTouch:touch];
+-            SDL_TouchID touchId = [self touchIdForType:touchType];
++            SDL_TouchID touchId = [self touchIdForTouch:touch];
+             float pressure = [self pressureForTouch:touch];
+ 
+-            if (SDL_AddTouch(touchId, touchType, "") < 0) {
++            if (SDL_AddTouch(touchId, touchType, [self touchNameForId:touchId]) < 0) {
+                 continue;
+             }
+ 
+@@ -357,10 +391,10 @@
+         if (!handled) {
+             CGPoint locationInView;
+             SDL_TouchDeviceType touchType = [self touchTypeForTouch:touch];
+-            SDL_TouchID touchId = [self touchIdForType:touchType];
++            SDL_TouchID touchId = [self touchIdForTouch:touch];
+             float pressure = [self pressureForTouch:touch];
+ 
+-            if (SDL_AddTouch(touchId, touchType, "") < 0) {
++            if (SDL_AddTouch(touchId, touchType, [self touchNameForId:touchId]) < 0) {
+                 continue;
+             }
+ 
