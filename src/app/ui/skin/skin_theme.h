@@ -55,6 +55,11 @@ namespace app {
       void setDecorativeWidgetBounds(ui::Widget* widget) override;
       int getScrollbarSize() override;
 
+      // The smallest side, in UI units, that a control the user is meant to
+      // tap may have. Zero where there is a mouse pointer to aim with, so
+      // nothing below changes on the desktop.
+      static int touchMinSize();
+
       void paintDesktop(ui::PaintEvent& ev) override;
       void paintBox(ui::PaintEvent& ev) override;
       void paintButton(ui::PaintEvent& ev) override;

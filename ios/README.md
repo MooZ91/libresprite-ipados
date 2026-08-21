@@ -69,6 +69,23 @@ build the dependencies against that sysroot too.
 The simulator emulates neither the Pencil, nor pressure, nor hover, so
 anything touching those has to be checked on real hardware.
 
+## Touch targets
+
+`SkinTheme::touchMinSize()` is the one place that knows how small a control
+may get before a finger stops hitting it: 44 UI units on iOS, where a UI unit
+is a point, and zero everywhere else, so the desktop is untouched. It floors
+the height of buttons, checkboxes, radios, combo boxes, menu items, list items
+and sliders, plus the size of the window close button.
+
+Only the height of the widgets is floored. Forcing the width as well pushes
+the tool bar off the side of the screen.
+
+The scrollbars are deliberately left alone. Widening them was tried and had
+to be reverted: the skin draws them from a nine-slice cut for a bar a few
+pixels wide, and stretching that to a fingertip turns it into bands and
+stripes. Making them touchable needs either new art or a hit area kept
+separate from what is drawn -- see the known gap below.
+
 ## Known gaps
 
 - No right mouse button, so the secondary colour is unreachable. Apple Pencil
@@ -79,4 +96,5 @@ anything touching those has to be checked on real hardware.
   palm are still delivered and drawn.
 - No hover. The hardware supports it on M2 and later iPads, but SDL's UIKit
   backend does not expose `UIHoverGestureRecognizer`.
-- No app icon.
+- The scrollbars are too thin to drag with a finger, and cannot simply be
+  widened: the skin's nine-slice does not stretch that far.

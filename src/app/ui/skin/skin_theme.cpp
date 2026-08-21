@@ -10,6 +10,9 @@
 #endif
 
 #include <algorithm>
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 #include <memory>
 #include <unordered_map>
 #include <optional>
@@ -1076,6 +1079,28 @@ void SkinTheme::initWidget(Widget* widget)
     default:
       break;
   }
+
+  // A finger has no tip to aim with, so anything meant to be tapped grows to
+  // at least touchMinSize(). Only the height is forced: widening every button
+  // would push the toolbars off the side of the screen, while the rows they
+  // sit in are free to grow downwards.
+  if (int minSide = touchMinSize()) {
+    switch (widget->type()) {
+      case kButtonWidget:
+      case kCheckWidget:
+      case kComboBoxWidget:
+      case kListItemWidget:
+      case kMenuItemWidget:
+      case kRadioWidget:
+      case kSliderWidget: {
+        gfx::Size sz = widget->minSize();
+        widget->setMinSize(gfx::Size(sz.w, std::max(sz.h, minSide)));
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }
 
 void SkinTheme::getWindowMask(Widget* widget, Region& region)
@@ -1088,6 +1113,8 @@ void SkinTheme::setDecorativeWidgetBounds(Widget* widget)
   if (widget->id() == kThemeCloseButtonId) {
     Widget* window = widget->parent();
     gfx::Rect rect(parts.windowCloseButtonNormal()->size());
+    rect.w = std::max(rect.w, touchMinSize());
+    rect.h = std::max(rect.h, touchMinSize());
 
     rect.offset(window->bounds().x2() - 3*guiscale() - rect.w,
                 window->bounds().y + 3*guiscale());
@@ -1099,6 +1126,17 @@ void SkinTheme::setDecorativeWidgetBounds(Widget* widget)
 int SkinTheme::getScrollbarSize()
 {
   return dimensions.scrollbarSize();
+}
+
+int SkinTheme::touchMinSize()
+{
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+  // One UI unit is one point on iOS, which is the unit Apple's 44pt minimum
+  // touch target is given in.
+  return 44;
+#else
+  return 0;
+#endif
 }
 
 void SkinTheme::paintDesktop(PaintEvent& ev)
@@ -1998,7 +2036,13 @@ void SkinTheme::paintWindowButton(ui::PaintEvent& ev)
   else
     part = parts.windowCloseButtonNormal();
 
-  g->drawRgbaSurface(part->bitmap(0), rc.x, rc.y);
+  // The button's bounds can be larger than the icon -- on a touch screen it
+  // is grown to a fingertip -- so the icon sits in the middle of them rather
+  // than in the corner.
+  she::Surface* bmp = part->bitmap(0);
+  g->drawRgbaSurface(bmp,
+                     rc.x + (rc.w - bmp->width())/2,
+                     rc.y + (rc.h - bmp->height())/2);
 }
 
 void SkinTheme::paintTooltip(PaintEvent& ev)
