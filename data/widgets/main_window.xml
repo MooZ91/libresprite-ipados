@@ -17,7 +17,7 @@
               <vbox noborders="true" id="tool_bar_alt_placeholder" />
               <splitter id="timeline_splitter"
                         vertical="true" expansive="true"
-                        by="percetage" position="100">
+                        by="percentage" position="100">
                 <hbox noborders="true" id="workspace_placeholder" expansive="true" />
                 <vbox noborders="true" id="timeline_placeholder" expansive="true" />
               </splitter>

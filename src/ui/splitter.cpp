@@ -304,10 +304,21 @@ void Splitter::onSaveLayout(SaveLayoutEvent& ev)
   ev.stream() << pos;
 }
 
+// isVisible() is not the question here: it walks up the ancestors and answers
+// false for anything not on screen yet. A window is laid out before it is
+// shown, and back then both panels looked absent, so onResize handed the whole
+// area to whichever one it could see -- leaving the other with nothing until
+// some later relayout happened to run while the window was up. What matters
+// for laying out is only whether the panel itself has been hidden.
+static bool panelIsLaidOut(const Widget* panel)
+{
+  return panel && !panel->hasFlags(HIDDEN);
+}
+
 Widget* Splitter::panel1() const
 {
   const WidgetsList& list = children();
-  if (list.size() >= 1 && list[0]->isVisible())
+  if (list.size() >= 1 && panelIsLaidOut(list[0]))
     return list[0];
   else
     return nullptr;
@@ -316,7 +327,7 @@ Widget* Splitter::panel1() const
 Widget* Splitter::panel2() const
 {
   const WidgetsList& list = children();
-  if (list.size() >= 2 && list[1]->isVisible())
+  if (list.size() >= 2 && panelIsLaidOut(list[1]))
     return list[1];
   else
     return nullptr;
