@@ -9,6 +9,11 @@ cross-compile, so it takes a few more steps than the desktop build.
   Tools, either switch it (`sudo xcode-select -s /Applications/Xcode.app`) or
   export `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 - CMake and Ninja.
+- To install on a real iPad rather than the simulator: an Apple ID signed
+  into Xcode (Settings ▸ Accounts) with a development certificate — a free
+  personal team is enough — and the iPad paired to the Mac at least once
+  (Xcode ▸ Window ▸ Devices and Simulators, or just plug it in and tap
+  "Trust" on the iPad).
 
 ## 1. Build `gen` for the host
 
@@ -58,16 +63,89 @@ the pencil a touch device of its own and normalises pressure.
     cmake --build build/ios
 
 For a device rather than the simulator, use `CMAKE_OSX_SYSROOT=iphoneos` and
-build the dependencies against that sysroot too.
+build the dependencies against that sysroot too -- but see the next section
+first: a device build needs the Xcode generator, not Ninja.
 
-## Running
+## Running in the simulator
 
     xcrun simctl boot "iPad Pro 11-inch (M5)"
     xcrun simctl install booted build/ios/bin/libresprite.app
     xcrun simctl launch --console-pty booted org.libresprite.LibreSprite
 
 The simulator emulates neither the Pencil, nor pressure, nor hover, so
-anything touching those has to be checked on real hardware.
+anything touching those has to be checked on real hardware. It also needs no
+code signing, which is why the Ninja build above is enough for it. To check
+those on real hardware, see the next section.
+
+## Building and installing on a real iPad
+
+A device build has two extra requirements the simulator build doesn't: the
+app has to be code-signed, and it needs an app icon, which only Xcode's own
+`actool` build phase produces (a Ninja build succeeds but ships with no
+icon). Both mean configuring with `-G Xcode` instead of `-G Ninja`, so CMake
+emits an `.xcodeproj` for `xcodebuild` to sign and build.
+
+Signing with a personal (free) Apple ID team also means the bundle
+identifier can't be the upstream `org.libresprite.LibreSprite` -- that
+belongs to someone else's team. Pick your own reverse-DNS identifier, e.g.
+`com.<you>.LibreSprite`, and pass it as `LIBRESPRITE_BUNDLE_IDENTIFIER`.
+
+### 1. Build the dependencies for the device
+
+    ./ios/build-deps.sh device      # build/ios-deps/prefix-device
+
+### 2. Configure and build with Xcode's generator
+
+Find your team ID with `security find-identity -v -p codesigning` (it's the
+value after the name, in parentheses is the *certificate's* ID -- the team
+ID is the `OU=` field if you check the cert itself, or just open Xcode ▸
+Settings ▸ Accounts ▸ your Apple ID ▸ your team and read it off there).
+
+    cmake -S . -B build/ios-xcode -G Xcode \
+      -DCMAKE_SYSTEM_NAME=iOS \
+      -DCMAKE_OSX_SYSROOT=iphoneos \
+      -DCMAKE_OSX_ARCHITECTURES=arm64 \
+      -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+      -DCMAKE_PREFIX_PATH=$PWD/build/ios-deps/prefix-device \
+      -DCMAKE_FIND_ROOT_PATH=$PWD/build/ios-deps/prefix-device \
+      -DGEN_EXECUTABLE=$PWD/build/ios-host/bin/gen \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DLIBRESPRITE_BUNDLE_IDENTIFIER=com.<you>.LibreSprite \
+      -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_STYLE=Automatic \
+      -DCMAKE_XCODE_ATTRIBUTE_DEVELOPMENT_TEAM=<your-team-id>
+
+    xcodebuild -project build/ios-xcode/libresprite.xcodeproj \
+      -scheme libresprite -configuration Release \
+      -destination 'generic/platform=iOS' \
+      -allowProvisioningUpdates build
+
+This produces a signed `build/ios-xcode/bin/libresprite.app`. Check
+`codesign -dv build/ios-xcode/bin/libresprite.app` if anything looks off --
+it should report your `TeamIdentifier` and `Identifier=` your chosen bundle
+id, not the upstream one.
+
+### 3. Install and launch over `devicectl`
+
+List paired devices to get the target's identifier:
+
+    xcrun devicectl list devices
+
+Then install and launch by that identifier:
+
+    xcrun devicectl device install app --device <device-id> \
+      build/ios-xcode/bin/libresprite.app
+    xcrun devicectl device process launch --device <device-id> \
+      com.<you>.LibreSprite
+
+Xcode's own Product ▸ Run works too, and is usually easier while iterating:
+open `build/ios-xcode/libresprite.xcodeproj`, pick the `libresprite` scheme
+and the iPad as the run destination, and hit Run. `xcodebuild`/`devicectl`
+is the scriptable path once signing is set up.
+
+A build here is landscape-only and targets iOS 18.0+ (the floor the Pencil
+Pro APIs need); nothing in these steps assumes a particular iPad model
+beyond that.
 
 ## Touch targets
 
