@@ -11,6 +11,10 @@
 
 #include "app/ui/file_selector.h"
 
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
 #include "base/string.h"
 #include "app/app.h"
 #include "app/console.h"
@@ -353,6 +357,17 @@ std::string FileSelector::show(
   if (base::get_file_path(initialPath).empty()) {
     // Get the saved `path' in the configuration file.
     std::string path = get_config_string("FileSelect", "CurrentDirectory", "<empty>");
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+    // Anything outside the documents folder is unreachable here: the rest of
+    // the sandbox is the app's own storage, and everything beyond it is
+    // refused outright. A directory remembered from an older build can point
+    // at either, so it only survives if it is still somewhere we can browse.
+    if (path != "<empty>" &&
+        path.compare(0, base::get_user_docs_folder().size(),
+                     base::get_user_docs_folder()) != 0) {
+      path = "<empty>";
+    }
+#endif
     if (path == "<empty>") {
       start_folder_path = base::get_user_docs_folder();
       path = base::join_path(start_folder_path, initialPath);

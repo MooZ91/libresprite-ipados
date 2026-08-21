@@ -25,6 +25,9 @@
 
 #include "base/path.h"
 #include "base/time.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 
 #define MAXPATHLEN 1024
 
@@ -163,6 +166,16 @@ std::string get_user_docs_folder()
 {
 #ifdef ANDROID
   return _AndroidStorageDir;
+#elif defined(__APPLE__) && TARGET_OS_IPHONE
+  // $HOME is the sandbox container, whose root holds Library/, tmp/ and other
+  // things the user has no business browsing. Documents/ is the one directory
+  // in there that the Files app shows -- LSSupportsOpeningDocumentsInPlace and
+  // UIFileSharingEnabled in Info.plist put it under "On My iPad" -- so it is
+  // both the sensible place to start and the only one files can be moved in
+  // and out of. Equivalent to NSDocumentDirectory, without needing Foundation.
+  if (const char* home = getenv("HOME"))
+    return std::string(home) + "/Documents";
+  return "/";
 #else
   char* tmpdir = getenv("HOME");
   if (tmpdir)
