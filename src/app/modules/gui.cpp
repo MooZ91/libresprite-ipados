@@ -45,6 +45,9 @@
 #include "she/surface.h"
 #include "she/system.h"
 #include "ui/intern.h"
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
 #include "ui/ui.h"
 
 #include <algorithm>
@@ -137,8 +140,13 @@ static bool create_main_display(bool gpuAccel,
   if (main_display) {
     // Change the scale value only in the first run (this will be
     // saved when the program is closed).
-    if (scale == 0)
-      Preferences::instance().general.screenScale(main_display->scale());
+    if (scale == 0) {
+      // scale() has the display's density folded into it. Saving that as the
+      // user's preference makes the next run multiply by the density a second
+      // time, and the run after that a third.
+      Preferences::instance().general.screenScale(
+        main_display->scale() / main_display->density());
+    }
 
     ResourceFinder rf;
     rf.includeDataDir("icons/ase64.png");
@@ -199,6 +207,20 @@ int init_module_gui()
 	  #endif
           Preferences::instance().experimental.uiScale(uiScale);
       }
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+      // The dialogs are laid out in theme units, and 320x240 of them is the
+      // smallest workspace LibreSprite ever tried to run in. A tablet has
+      // pixels to spare, but its density pushes uiScale up until the
+      // workspace no longer fits them -- at 4 it is 295x205 and the larger
+      // windows open wider than the screen. Shrink until they fit; there is
+      // no way to reach the preferences dialog to undo it if they do not.
+      while (uiScale > 1 &&
+             (ui::display_w()/uiScale < 320 ||
+              ui::display_h()/uiScale < 240)) {
+        --uiScale;
+        Preferences::instance().experimental.uiScale(uiScale);
+      }
+#endif
       gui_theme->setScale(uiScale);
   }
   CurrentTheme::set(gui_theme);
