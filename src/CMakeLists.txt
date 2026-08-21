@@ -168,7 +168,10 @@ if(IOS)
   endif()
 
   set(LIBRESPRITE_BUNDLE_EXECUTABLE "libresprite")
-  set(LIBRESPRITE_BUNDLE_IDENTIFIER "org.libresprite.LibreSprite")
+  # Overridable: signing with a personal team needs a bundle identifier that
+  # belongs to that team, and the upstream one may already be taken.
+  set(LIBRESPRITE_BUNDLE_IDENTIFIER "org.libresprite.LibreSprite"
+      CACHE STRING "Bundle identifier of the iOS/macOS app")
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/main/Info.plist.in
     ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
@@ -179,7 +182,27 @@ if(IOS)
   set_target_properties(libresprite PROPERTIES
     MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_BINARY_DIR}/Info.plist
-    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${LIBRESPRITE_BUNDLE_IDENTIFIER}")
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${LIBRESPRITE_BUNDLE_IDENTIFIER}"
+    # Xcode writes UIDeviceFamily from this setting, overwriting whatever
+    # Info.plist.in said. Left at its default the app installs as an iPhone
+    # app and the iPad runs it letterboxed at 667x375 points.
+    XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "2"
+    XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME "AppIcon")
+
+  # The icon has to go through actool -- iOS ignores a plain PNG in the bundle
+  # -- so the catalog is handed to the target as a source and Xcode's own
+  # build rule compiles it. This is the Xcode generator's job alone: a Ninja
+  # build produces an app with no icon.
+  if(CMAKE_GENERATOR STREQUAL "Xcode")
+    set(_appicon_assets ${CMAKE_CURRENT_SOURCE_DIR}/main/Assets.xcassets)
+    # It has to land in the Resources build phase, not Sources: that is where
+    # Xcode's rule for folder.assetcatalog lives. Added as a plain source it
+    # ends up in no phase at all, actool never runs, and the build succeeds
+    # with no icon in the bundle.
+    set_source_files_properties(${_appicon_assets}
+      PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    target_sources(libresprite PRIVATE ${_appicon_assets})
+  endif()
 
   set_source_files_properties(${CMAKE_SOURCE_DIR}/data
     PROPERTIES MACOSX_PACKAGE_LOCATION Resources)

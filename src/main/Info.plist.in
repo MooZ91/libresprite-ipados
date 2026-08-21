@@ -53,6 +53,12 @@
 
 	<!-- The editor wants the whole screen; opting out of Split View also
 	     avoids having to handle multitasking resizes for now. -->
+	<!-- actool writes this too, but CMake supplies its own Info.plist and the
+	     partial one Xcode merges is easy to lose. Without it iOS shows the
+	     default grey tile even though the catalog compiled fine. -->
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UIStatusBarHidden</key>
