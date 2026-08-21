@@ -35,6 +35,7 @@
 #include <SDL_syswm.h>
 #endif
 
+#include <cmath>
 #include <iostream>
 #include <cassert>
 #include <list>
@@ -324,6 +325,11 @@ namespace {
 // Pointer events arrive in the windowing system's coordinates, which on a
 // HiDPI display are not the surface's pixels. Scale them the way the surface
 // itself is scaled, so a touch lands where it looks like it landed.
+// A second finger on the screen means the user is pinching, not drawing. SDL
+// keeps synthesising mouse events from the first finger throughout, so the
+// stroke has to be closed and the rest of them dropped until the hand lifts.
+bool gestureActive = false;
+
 int toSurfaceCoord(int v)
 {
   return (int)(v * she::unique_display->pointToPixel() / she::unique_display->scale());
@@ -499,6 +505,8 @@ namespace she {
           continue;
 
         case SDL_MOUSEMOTION:
+          if (gestureActive)
+            continue;
           if (!display_has_mouse) {
             display_has_mouse = true;
             Event ev;
@@ -526,6 +534,24 @@ namespace she {
           return;
 
         case SDL_FINGERDOWN:
+          if (!gestureActive &&
+              SDL_GetNumTouchFingers(sdlEvent.tfinger.touchId) >= 2) {
+            gestureActive = true;
+            // The first finger has been drawing up to now. Release the button
+            // so the tool loop closes instead of being left half-way through
+            // a stroke while the pinch runs.
+            {
+              int x = 0, y = 0;
+              SDL_GetMouseState(&x, &y);
+              Event ev;
+              ev.setType(Event::MouseUp);
+              ev.setPosition({toSurfaceCoord(x), toSurfaceCoord(y)});
+              ev.setButton(Event::LeftButton);
+              ev.setModifiers(getSheModifiers());
+              m_events.push(ev);
+            }
+          }
+          // fallthrough
         case SDL_FINGERMOTION:
 #if defined(__APPLE__) && TARGET_OS_IPHONE
           // Only a pencil carries a meaningful pressure. A finger reports a
@@ -540,6 +566,12 @@ namespace she {
           continue;
 
         case SDL_FINGERUP:
+          // SDL still counts the finger that is lifting, so 1 here means the
+          // screen is about to be empty. Waiting for that keeps the finger
+          // left behind by a pinch from carrying on as a stroke.
+          if (gestureActive &&
+              SDL_GetNumTouchFingers(sdlEvent.tfinger.touchId) <= 1)
+            gestureActive = false;
           // Nothing used to clear this outside the emscripten path, so once a
           // pen had touched the screen every later stroke stayed in pen mode
           // at whatever pressure was last seen, and the brush preview -- which
@@ -561,6 +593,8 @@ namespace she {
 
         case SDL_MOUSEBUTTONUP:
         case SDL_MOUSEBUTTONDOWN: {
+          if (gestureActive)
+            continue;
           auto type = sdlEvent.type == SDL_MOUSEBUTTONDOWN ? Event::MouseDown : Event::MouseUp;
           event.setType(type);
           event.setPosition({
@@ -648,6 +682,28 @@ namespace she {
           // MouseEnter,
           // MouseLeave,
           // TouchMagnify,
+        case SDL_MULTIGESTURE:
+          // dDist is the change in the distance between the fingers, given as
+          // a fraction of the window, which is already the relative delta that
+          // TouchMagnify wants. The factor only sets how far a pinch travels
+          // before the zoom follows; it was picked by feel on an iPad.
+          if (sdlEvent.mgesture.numFingers == 2 &&
+              std::fabs(sdlEvent.mgesture.dDist) > 0.0001f) {
+            event.setType(Event::TouchMagnify);
+            event.setMagnification(sdlEvent.mgesture.dDist * 6.0);
+            // x and y are normalised to the window, so they need the surface's
+            // size rather than the point-to-pixel conversion the others use.
+            event.setPosition({
+                int(sdlEvent.mgesture.x * unique_display->width() /
+                    unique_display->scale()),
+                int(sdlEvent.mgesture.y * unique_display->height() /
+                    unique_display->scale())
+              });
+            event.setModifiers(getSheModifiers());
+            return;
+          }
+          continue;
+
         case SDL_QUIT:
           event.setType(Event::CloseDisplay);
           return;
