@@ -40,6 +40,17 @@ namespace she {
     // screen.
     virtual int scale() const = 0;
 
+    // How many screen pixels the windowing system reports per unit of the
+    // coordinates it hands us. On a HiDPI display these differ, and the
+    // difference is folded into scale(), so scale()/density() is the part of
+    // the scale the user actually chose.
+    virtual int density() const { return 1; }
+
+    // The same ratio unrounded. Input events arrive in the windowing
+    // system's units, so converting them to surface coordinates needs the
+    // true ratio rather than the integer one scale() was built from.
+    virtual double pointToPixel() const { return 1.0; }
+
     // Changes the scale.
     // The available surface size will be (Display::width() / scale,
     //                                     Display::height() / scale)

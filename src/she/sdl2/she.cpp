@@ -319,6 +319,18 @@ static void patchEventListeners() {
 
 static std::deque<she::Event> keybuffer;
 static bool display_has_mouse = false;
+namespace {
+
+// Pointer events arrive in the windowing system's coordinates, which on a
+// HiDPI display are not the surface's pixels. Scale them the way the surface
+// itself is scaled, so a touch lands where it looks like it landed.
+int toSurfaceCoord(int v)
+{
+  return (int)(v * she::unique_display->pointToPixel() / she::unique_display->scale());
+}
+
+} // anonymous namespace
+
 namespace she {
   void log(const std::string& text) {
 #if defined(ANDROID)
@@ -497,8 +509,8 @@ namespace she {
           event.setType(Event::MouseMove);
           event.setModifiers(getSheModifiers());
           event.setPosition({
-              sdlEvent.motion.x / unique_display->scale(),
-              sdlEvent.motion.y / unique_display->scale()
+              toSurfaceCoord(sdlEvent.motion.x),
+              toSurfaceCoord(sdlEvent.motion.y)
             });
 
 	  {
@@ -542,8 +554,8 @@ namespace she {
           int x, y;
           SDL_GetMouseState(&x, &y);
           event.setPosition({
-              x / unique_display->scale(),
-              y / unique_display->scale()
+              toSurfaceCoord(x),
+              toSurfaceCoord(y)
             });
           return;
 
@@ -552,8 +564,8 @@ namespace she {
           auto type = sdlEvent.type == SDL_MOUSEBUTTONDOWN ? Event::MouseDown : Event::MouseUp;
           event.setType(type);
           event.setPosition({
-              sdlEvent.button.x / unique_display->scale(),
-              sdlEvent.button.y / unique_display->scale()
+              toSurfaceCoord(sdlEvent.button.x),
+              toSurfaceCoord(sdlEvent.button.y)
             });
           event.setButton(mouseButtonMapping[sdlEvent.button.button]);
           event.setModifiers(getSheModifiers());
@@ -988,11 +1000,18 @@ namespace she {
       SDL_StopTextInput();
       return;
     }
+    // The rect arrives in surface coordinates. SDL measures the window in
+    // its own units, which on a HiDPI display are neither those nor pixels.
+    // Handing it surface coordinates makes iOS think the field sits far below
+    // the keyboard, and it scrolls the whole view off the top of the screen.
+    const double f = unique_display
+      ? unique_display->scale() / unique_display->pointToPixel()
+      : 1.0;
     SDL_Rect sdlRect{
-      rect.x,
-      rect.y,
-      rect.w,
-      rect.h
+      (int)(rect.x * f),
+      (int)(rect.y * f),
+      (int)(rect.w * f),
+      (int)(rect.h * f)
     };
     SDL_SetTextInputRect(&sdlRect);
     SDL_StartTextInput();

@@ -40,6 +40,8 @@ namespace she {
         void setOriginalWidth(int width);
         void setOriginalHeight(int height);
         int scale() const override;
+        int density() const override { return m_density; }
+        double pointToPixel() const override { return m_pointToPixel; }
         void setScale(int scale) override;
         void recreateSurface();
         Surface* getSurface() override;
@@ -68,6 +70,8 @@ namespace she {
         Surface* m_surface{};
         Surface* m_doublebuffer{};
         int m_scale;
+        int m_density = 1;
+        double m_pointToPixel = 1.0;
         int m_width;
         int m_height;
         NativeCursor m_nativeCursor;

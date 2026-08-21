@@ -21,6 +21,8 @@
 #include "she/logger.h"
 #include "she/native_cursor.h"
 #include "she/sdl2/sdl2_display.h"
+
+#include <cmath>
 #include "she/sdl2/sdl2_surface.h"
 
 #if __has_include(<SDL2/SDL.h>)
@@ -112,8 +114,14 @@ namespace she {
       int pixelWidth = width, pixelHeight = height;
       SDL_GetWindowSizeInPixels(m_window, &pixelWidth, &pixelHeight);
       if (width > 0 && height > 0) {
-	int density = pixelWidth / width;
+	// Rounded, not truncated: an iPad whose Display Zoom is set to "More
+	// Space" reports a fractional density (2360/1373 = 1.72 on an Air M3),
+	// and truncating that to 1 draws the whole UI at half the physical size
+	// it is meant to have.
+	m_pointToPixel = (double)pixelWidth / (double)width;
+	int density = (int)lround(m_pointToPixel);
 	if (density >= 1) {
+	  m_density = density;
 	  scale *= density;
 	  width = pixelWidth;
 	  height = pixelHeight;

@@ -205,12 +205,9 @@ bool Entry::onProcessMessage(Message* msg)
     case kFocusEnterMessage: {
       m_got_focus_message = true;
       View* view = View::getView(this);
+      // Passed in the UI's own coordinates. Converting them to whatever the
+      // platform's windowing system measures in is she's job, not ours.
       gfx::Rect rect = view ? view->viewportBounds() : bounds();
-      int scale = 2*guiscale();
-      rect.x *= scale;
-      rect.y *= scale;
-      rect.h *= scale;
-      rect.w *= scale;
       if (!isReadOnly() && showsKeyboard())
           she::set_input_rect(rect);
 
