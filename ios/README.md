@@ -172,7 +172,15 @@ separate from what is drawn -- see the known gap below.
   without a hardware keyboard.
 - No palm rejection yet. The pencil can now be identified, but touches from a
   palm are still delivered and drawn.
-- No hover. The hardware supports it on M2 and later iPads, but SDL's UIKit
-  backend does not expose `UIHoverGestureRecognizer`.
+- Apple Pencil hover arrives, but by accident rather than by design: UIKit
+  routes it through the same pointer interaction as a trackpad, so SDL
+  reports it as motion of its *real* mouse (`SDL_MouseMotionEvent::which ==
+  0`) rather than of the touch-emulated one (`SDL_TOUCH_MOUSEID`). It moves
+  the brush preview, which is useful, but the two share one cursor position
+  and UIKit fires a hover motion as the pencil lifts that still carries the
+  point the stroke began at. `she.cpp` therefore ignores hover for as long as
+  the screen is being touched, and takes the button events' position from the
+  touch instead of from the shared cursor. Proper hover -- tip proximity,
+  `UIHoverGestureRecognizer`, tilt -- is still unimplemented.
 - The scrollbars are too thin to drag with a finger, and cannot simply be
   widened: the skin's nine-slice does not stretch that far.

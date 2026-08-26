@@ -80,6 +80,22 @@ namespace {
 
     return pencilTouchId && id == pencilTouchId;
   }
+
+  // Apple Pencil hover reaches SDL as a motion of the *real* mouse
+  // (SDL_MouseMotionEvent::which == 0), while a finger or a pencil in
+  // contact drives the touch-emulated one (SDL_TOUCH_MOUSEID). Both share a
+  // single cursor position, and UIKit fires a hover motion as the pencil
+  // lifts that still carries the point the stroke started at. Fed to the
+  // still-open tool loop that became the stroke's last point, closing every
+  // pencil stroke with a straight line back to its own beginning; it also
+  // left SDL's cursor -- and with it the button-up event SDL builds from it
+  // -- on the wrong pixel.
+  //
+  // So while the screen is being touched, hover is ignored, and the release
+  // reports the touch's own last position instead of the shared cursor.
+  int activeTouches = 0;
+  int lastTouchX = 0;
+  int lastTouchY = 0;
 }
 #endif
 
@@ -507,6 +523,16 @@ namespace she {
         case SDL_MOUSEMOTION:
           if (gestureActive)
             continue;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+          if (sdlEvent.motion.which == SDL_TOUCH_MOUSEID) {
+            lastTouchX = sdlEvent.motion.x;
+            lastTouchY = sdlEvent.motion.y;
+          }
+          else if (activeTouches > 0) {
+            // Hover on top of a stroke: see the note by activeTouches.
+            continue;
+          }
+#endif
           if (!display_has_mouse) {
             display_has_mouse = true;
             Event ev;
@@ -534,6 +560,9 @@ namespace she {
           return;
 
         case SDL_FINGERDOWN:
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+          ++activeTouches;
+#endif
           if (!gestureActive &&
               SDL_GetNumTouchFingers(sdlEvent.tfinger.touchId) >= 2) {
             gestureActive = true;
@@ -542,7 +571,12 @@ namespace she {
             // a stroke while the pinch runs.
             {
               int x = 0, y = 0;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+              x = lastTouchX;
+              y = lastTouchY;
+#else
               SDL_GetMouseState(&x, &y);
+#endif
               Event ev;
               ev.setType(Event::MouseUp);
               ev.setPosition({toSurfaceCoord(x), toSurfaceCoord(y)});
@@ -566,6 +600,10 @@ namespace she {
           continue;
 
         case SDL_FINGERUP:
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+          if (activeTouches > 0)
+            --activeTouches;
+#endif
           // SDL still counts the finger that is lifting, so 1 here means the
           // screen is about to be empty. Waiting for that keeps the finger
           // left behind by a pinch from carrying on as a stroke.
@@ -596,10 +634,33 @@ namespace she {
           if (gestureActive)
             continue;
           auto type = sdlEvent.type == SDL_MOUSEBUTTONDOWN ? Event::MouseDown : Event::MouseUp;
+          int buttonX = sdlEvent.button.x;
+          int buttonY = sdlEvent.button.y;
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+          // SDL fills these in from the cursor position it shares with
+          // hover, and the hover motion that fires as the pencil lifts is
+          // stale, so the release would land on the point the stroke began
+          // at. The press is trustworthy the other way around: SDL sets the
+          // cursor from the touch itself immediately before sending it. It
+          // may not *post* a motion event for that -- when hover had already
+          // moved the cursor to the same pixel, SDL drops it as a no-op --
+          // which is why the press is what seeds the remembered position
+          // rather than a motion event.
+          if (sdlEvent.button.which == SDL_TOUCH_MOUSEID) {
+            if (sdlEvent.type == SDL_MOUSEBUTTONDOWN) {
+              lastTouchX = buttonX;
+              lastTouchY = buttonY;
+            }
+            else {
+              buttonX = lastTouchX;
+              buttonY = lastTouchY;
+            }
+          }
+#endif
           event.setType(type);
           event.setPosition({
-              toSurfaceCoord(sdlEvent.button.x),
-              toSurfaceCoord(sdlEvent.button.y)
+              toSurfaceCoord(buttonX),
+              toSurfaceCoord(buttonY)
             });
           event.setButton(mouseButtonMapping[sdlEvent.button.button]);
           event.setModifiers(getSheModifiers());
