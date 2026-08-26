@@ -204,7 +204,15 @@ void ScrollBar::getScrollBarInfo(int *_pos, int *_len, int *_bar_size, int *_vie
   }
   else if (m_size > 0) {
     len = bar_size * viewport_size / m_size;
-    len = MID(theme()->getScrollbarSize()*2-border_width, len, bar_size);
+    // The shortest the thumb may get is tied to this bar's own width -- it
+    // should not end up shorter than it is wide -- rather than to the theme's
+    // default scrollbar size. The two are the same for a default bar, but the
+    // timeline, the palette and the editor set theirs to a fraction of it, and
+    // on a short panel that default minimum swallowed the whole track: a 67
+    // unit tall bar was given a 66 unit thumb, leaving a single unit of
+    // travel, so dragging it snapped between the two ends instead of
+    // scrolling.
+    len = MID(m_barWidth*2-border_width, len, bar_size);
     pos = (bar_size-len) * m_pos / (m_size-viewport_size);
     pos = MID(0, pos, bar_size-len);
   }
