@@ -99,6 +99,34 @@ namespace {
 }
 #endif
 
+namespace {
+
+// SDL synthesises the mouse events for a touch and queues them *before* the
+// touch's own finger event, so a mouse event on its own carries neither the
+// pressure of the touch that caused it nor any way to tell a pencil from a
+// finger. Peek at the finger event that follows it.
+bool peekTouchPressure(Uint32 fingerEventType, float& pressure)
+{
+  SDL_Event peeked;
+  if (SDL_PeepEvents(&peeked, 1, SDL_PEEKEVENT,
+                     fingerEventType, fingerEventType) != 1)
+    return false;
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+  // Only a pencil carries a meaningful pressure. A finger reports a fully
+  // pressed touch, which taken as pen pressure would pin the pointer type to
+  // Pen and hide the brush preview for good.
+  pressure = isPencilTouch(peeked.tfinger.touchId)
+    ? std::max<>(peeked.tfinger.pressure, 0.0001f)
+    : 0.0f;
+#else
+  pressure = std::max<>(peeked.tfinger.pressure, 0.0001f);
+#endif
+  return true;
+}
+
+} // anonymous namespace
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 extern "C" {
@@ -548,10 +576,9 @@ namespace she {
             });
 
 	  {
-	      int hasFingerEvent = SDL_PeepEvents(&sdlEvent, 1, SDL_PEEKEVENT, SDL_FINGERMOTION, SDL_FINGERMOTION);
-	      if (hasFingerEvent) {
-		  penPressure = std::max<>(sdlEvent.tfinger.pressure, 0.0001f);
-	      }
+	      float pressure;
+	      if (peekTouchPressure(SDL_FINGERMOTION, pressure))
+		  penPressure = pressure;
 	  }
 
 
@@ -665,15 +692,31 @@ namespace she {
           event.setButton(mouseButtonMapping[sdlEvent.button.button]);
           event.setModifiers(getSheModifiers());
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+	  if (sdlEvent.type == SDL_MOUSEBUTTONDOWN) {
+	    // The press is queued ahead of its own SDL_FINGERDOWN, so at this
+	    // point penPressure is still whatever the previous stroke left --
+	    // zero, once its release had cleared it. Deciding the pointer type
+	    // from that left the first stroke of a session on Mouse, and ui
+	    // reads a Mouse pointer's pressure as a flat 1.0, so the pencil
+	    // drew with no pressure at all until a stroke had been finished.
+	    float pressure;
+	    if (peekTouchPressure(SDL_FINGERDOWN, pressure))
+	      penPressure = pressure;
+	  }
+#endif
+
 	  if (penPressure > 0.0f) {
 	    pointerType = PointerType::Pen;
 	    event.setPressure(penPressure);
-	    event.setPointerType(pointerType);
 	  } else {
-	    event.setPressure(sdlEvent.type == SDL_MOUSEBUTTONDOWN ? 1.0f : 0.0f);
-	    event.setPointerType(pointerType);
+	    // Assigning the type before reporting it matters: reporting the
+	    // old one first left it latched to Pen for every later event, once
+	    // a pen release had set it.
 	    pointerType = PointerType::Mouse;
+	    event.setPressure(sdlEvent.type == SDL_MOUSEBUTTONDOWN ? 1.0f : 0.0f);
 	  }
+	  event.setPointerType(pointerType);
 
 	  auto now = std::chrono::steady_clock::now();
 	  auto delta = now - lastUpTime;
