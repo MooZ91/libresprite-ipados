@@ -60,7 +60,7 @@ RecentFiles::RecentFiles()
   }
 }
 
-RecentFiles::~RecentFiles()
+void RecentFiles::save()
 {
   char buf[512];
 
@@ -71,12 +71,26 @@ RecentFiles::~RecentFiles()
     c++;
   }
 
+  // Drop the entries of a list that used to be longer, so they don't
+  // come back on the next run.
+  for (; c<(int)m_files.limit(); ++c) {
+    snprintf(buf, sizeof(buf), "Filename%02d", c);
+    del_config_value("RecentFiles", buf);
+  }
+
   c = 0;
   for (auto const& path : m_paths) {
     snprintf(buf, sizeof(buf), "Path%02d", c);
     set_config_string("RecentPaths", buf, path.c_str());
     c++;
   }
+
+  for (; c<(int)m_paths.limit(); ++c) {
+    snprintf(buf, sizeof(buf), "Path%02d", c);
+    del_config_value("RecentPaths", buf);
+  }
+
+  flush_config_file();
 }
 
 void RecentFiles::addRecentFile(const char* filename)
@@ -87,6 +101,7 @@ void RecentFiles::addRecentFile(const char* filename)
   std::string path = base::get_file_path(fn);
   m_paths.addItem(path, compare_path(path));
 
+  save();
   Changed();
 }
 
@@ -98,6 +113,7 @@ void RecentFiles::removeRecentFile(const char* filename)
   std::string path = base::get_file_path(filename);
   m_paths.removeItem(path, compare_path(path));
 
+  save();
   Changed();
 }
 

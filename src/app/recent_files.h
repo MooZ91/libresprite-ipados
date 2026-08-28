@@ -29,7 +29,6 @@ namespace app {
     const_iterator paths_end() { return m_paths.end(); }
 
     RecentFiles();
-    ~RecentFiles();
 
     void addRecentFile(const char* filename);
     void removeRecentFile(const char* filename);
@@ -37,6 +36,12 @@ namespace app {
     base::Signal0<void> Changed;
 
   private:
+    // Writes both lists to the configuration file. Called on every
+    // change: the app is not always given the chance to shut down
+    // cleanly (on iOS the system just kills it while suspended), so
+    // saving at exit would lose the list every time.
+    void save();
+
     std::string normalizePath(std::string fn);
 
     List m_files;
