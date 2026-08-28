@@ -75,5 +75,11 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+
+	<!-- Export hands the file to the share sheet, where "Save Image" writes
+	     to the photo library. iOS kills an app that reaches the library
+	     without declaring why, even through the share sheet. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save exported sprites to your photo library.</string>
 </dict>
 </plist>

@@ -21,6 +21,10 @@
 #include "ui/system.h"
 #include "she/display.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
+
 #if defined(ANDROID)
 extern void _AndroidShareFile(const std::string& path);
 #endif
@@ -59,6 +63,11 @@ static void EmscriptenShareFile(const std::string& path) {
 
 namespace app {
 
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+  // Implemented in cmd_share_ios.mm.
+  bool ios_share_file(const std::string& path);
+#endif
+
   class ShareCommand : public Command {
   public:
 
@@ -67,31 +76,51 @@ namespace app {
     Command* clone() const override { return new ShareCommand(*this); }
 
   protected:
+    // A file to share instead of the active document, so that a command that
+    // just wrote one (Export) can hand it over even though the document
+    // itself is still unsaved.
+    void onLoadParams(const Params& params) override {
+      m_filename = params.get("filename");
+    }
+
     bool onEnabled(Context* context) override {
-#if defined(ANDROID) || defined(__EMSCRIPTEN__)
+#if defined(ANDROID) || defined(__EMSCRIPTEN__) || (defined(__APPLE__) && TARGET_OS_IPHONE)
       return context->checkFlags(ContextFlags::ActiveDocumentIsWritable);
 #endif
       return false;
     }
 
     void onExecute(Context* context) override {
-      auto document = context->activeDocument();
+      std::string filename = m_filename;
 
-      if (!document->isAssociatedToFile() || document->isModified()) {
-        ui::Alert::show("Notice<<You must save before you share!||&OK");
-        auto saveAsCommand = app::CommandsModule::instance()->getCommandByName(CommandId::SaveFile);
-        context->executeCommand(saveAsCommand);
-        return;
+      if (filename.empty()) {
+        auto document = context->activeDocument();
+
+        if (!document->isAssociatedToFile() || document->isModified()) {
+          ui::Alert::show("Notice<<You must save before you share!||&OK");
+          auto saveAsCommand = app::CommandsModule::instance()->getCommandByName(CommandId::SaveFile);
+          context->executeCommand(saveAsCommand);
+          return;
+        }
+
+        filename = document->filename();
       }
 
 #if defined(ANDROID)
-      _AndroidShareFile(document->filename());
+      _AndroidShareFile(filename);
 #endif
 
 #if defined(EMSCRIPTEN)
-      EmscriptenShareFile(document->filename());
+      EmscriptenShareFile(filename);
+#endif
+
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+      ios_share_file(filename);
 #endif
     }
+
+  private:
+    std::string m_filename;
   };
 
   Command* CommandFactory::createShareCommand()

@@ -345,8 +345,13 @@ void SaveFileCopyAsCommand::onExecute(Context* context)
     docPref.saveCopy.filename(document->filename());
     docPref.saveCopy.resizeScale(delegate.getResizeScale());
 
-    if (auto shareCommand = app::CommandsModule::instance()->getCommandByName(CommandId::Share))
-	context->executeCommand(shareCommand);
+    if (auto shareCommand = app::CommandsModule::instance()->getCommandByName(CommandId::Share)) {
+      // Share the copy that was just written, not the document: a "save copy
+      // as" leaves the document unsaved and pointing back at its own file.
+      Params shareParams;
+      shareParams.set("filename", m_selectedFilename.c_str());
+      context->executeCommand(shareCommand, shareParams);
+    }
   }
 
   // Restore the file name.

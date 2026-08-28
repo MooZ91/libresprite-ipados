@@ -92,6 +92,13 @@ set(file_formats
   file/webp_format.cpp
 )
 
+if(APPLE AND IOS)
+  # The sandbox has no place to put an exported file that another app can
+  # reach, so sharing is how files leave LibreSprite on iOS.
+  set(ios_files commands/cmd_share_ios.mm)
+  set_source_files_properties(${ios_files} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+endif()
+
 add_library(app-lib
   app.cpp
   app_brushes.cpp
@@ -471,5 +478,6 @@ add_library(app-lib
   widget_loader.cpp
   xml_document.cpp
   ${data_recovery_files}
+  ${ios_files}
   ${generated_files})
 endif()
