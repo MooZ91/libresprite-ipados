@@ -35,6 +35,27 @@
 		<string>arm64</string>
 	</array>
 
+	<!-- iOS 27 aborts apps that do not use the UIScene lifecycle. SDL still
+	     creates its own windows; the patched SDL attaches them to the scene
+	     this delegate receives (ios/patches/sdl2-ios-scene.patch). -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default</string>
+					<key>UISceneDelegateClassName</key>
+					<string>SDLUIKitSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+
 	<!-- An empty UILaunchScreen still has to be present: without one iOS runs
 	     the app in a scaled compatibility mode instead of at native
 	     resolution, which would blur every pixel LibreSprite draws. -->

@@ -1,0 +1,96 @@
+diff -ruN a/src/video/uikit/SDL_uikitappdelegate.m b/src/video/uikit/SDL_uikitappdelegate.m
+--- a/src/video/uikit/SDL_uikitappdelegate.m	2026-10-11 12:50:57
++++ b/src/video/uikit/SDL_uikitappdelegate.m	2026-10-11 12:51:52
+@@ -349,6 +349,38 @@
+ 
+ @end
+ 
++/* iOS 27 aborts apps built against its SDK that do not adopt the UIScene
++   lifecycle. The scene is only a vehicle here: SDL keeps drawing into the
++   windows it creates itself, but they have to be attached to a UIWindowScene,
++   so remember the one UIKit connects. Info.plist names this class as the
++   scene delegate. */
++UIWindowScene *SDL_UIKitWindowScene = nil;
++
++@interface SDLUIKitSceneDelegate : UIResponder <UIWindowSceneDelegate>
++@property (nonatomic, strong) UIWindow *window;
++@end
++
++@implementation SDLUIKitSceneDelegate
++
++- (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions
++{
++    if ([scene isKindOfClass:[UIWindowScene class]]) {
++        SDL_UIKitWindowScene = (UIWindowScene *)scene;
++    }
++    /* Scene-based apps get documents here instead of application:openURL: */
++    [self scene:scene openURLContexts:connectionOptions.URLContexts];
++}
++
++- (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
++{
++    id<UIApplicationDelegate> delegate = [UIApplication sharedApplication].delegate;
++    for (UIOpenURLContext *context in URLContexts) {
++        [delegate application:[UIApplication sharedApplication] openURL:context.URL options:@{}];
++    }
++}
++
++@end
++
+ @implementation SDLUIKitDelegate {
+     UIWindow *launchWindow;
+ }
+diff -ruN a/src/video/uikit/SDL_uikitviewcontroller.m b/src/video/uikit/SDL_uikitviewcontroller.m
+--- a/src/video/uikit/SDL_uikitviewcontroller.m	2026-10-11 12:50:57
++++ b/src/video/uikit/SDL_uikitviewcontroller.m	2026-10-11 14:09:34
+@@ -527,13 +527,19 @@
+ 
+ - (void)updateKeyboard
+ {
++    /* The view is left alone: SDL's orientation guess in
++       UIKit_ComputeViewFrame comes out portrait under a UIWindowScene and
++       shrank the view the first time a text field took focus. */
++    return;
+     SDL_WindowData *data = (__bridge SDL_WindowData *)window->driverdata;
+ 
+     CGAffineTransform t = self.view.transform;
+     CGPoint offset = CGPointMake(0.0, 0.0);
+     CGRect frame = UIKit_ComputeViewFrame(window, data.uiwindow.screen);
+ 
+-    if (self.keyboardHeight) {
++    /* LibreSprite lays out its own dialogs, and under a UIWindowScene the
++       keyboard rect is not reliable enough to slide the whole view by. */
++    if (0 && self.keyboardHeight) {
+         int rectbottom = self.textInputRect.y + self.textInputRect.h;
+         int keybottom = self.view.bounds.size.height - self.keyboardHeight;
+         if (keybottom < rectbottom) {
+diff -ruN a/src/video/uikit/SDL_uikitwindow.m b/src/video/uikit/SDL_uikitwindow.m
+--- a/src/video/uikit/SDL_uikitwindow.m	2026-10-11 12:50:57
++++ b/src/video/uikit/SDL_uikitwindow.m	2026-10-11 12:53:32
+@@ -59,6 +59,8 @@
+ 
+ @end
+ 
++extern UIWindowScene *SDL_UIKitWindowScene;
++
+ @interface SDL_uikitwindow : UIWindow
+ 
+ - (void)layoutSubviews;
+@@ -207,7 +209,16 @@
+ 
+         /* ignore the size user requested, and make a fullscreen window */
+         /* !!! FIXME: can we have a smaller view? */
+-        uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        /* The scene connects after didFinishLaunching, so SDL_main can get
++           here first; run the loop until it shows up. */
++        for (int i = 0; SDL_UIKitWindowScene == nil && i < 500; i++) {
++            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
++        }
++        if (SDL_UIKitWindowScene != nil) {
++            uiwindow = [[SDL_uikitwindow alloc] initWithWindowScene:SDL_UIKitWindowScene];
++        } else {
++            uiwindow = [[SDL_uikitwindow alloc] initWithFrame:data.uiscreen.bounds];
++        }
+ 
+         /* put the window on an external display if appropriate. */
+         if (data.uiscreen != [UIScreen mainScreen]) {

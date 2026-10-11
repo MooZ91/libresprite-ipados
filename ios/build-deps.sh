@@ -146,6 +146,10 @@ if ! grep -q pencilTouchId src/video/uikit/SDL_uikitview.m; then
   echo "==> patching SDL2 for Apple Pencil"
   patch -p1 < "$REPO/ios/patches/sdl2-ios-pencil.patch"
 fi
+if ! grep -q SDLUIKitSceneDelegate src/video/uikit/SDL_uikitappdelegate.m; then
+  echo "==> patching SDL2 for the UIScene lifecycle"
+  patch -p1 < "$REPO/ios/patches/sdl2-ios-scene.patch"
+fi
 build sdl2 "$SRC/SDL2-$SDL2_VER" -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST=OFF
 
 # SDL2_image bundles its own QOI, which collides with LibreSprite's once
